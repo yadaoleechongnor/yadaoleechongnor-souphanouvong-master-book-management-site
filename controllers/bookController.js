@@ -1,3 +1,6 @@
+const express = require('express');
+const app = express();
+
 const Book = require('../models/bookModel');
 const { cloudinary } = require('../config/cloudinary');
 const multer = require('multer');
@@ -7,7 +10,6 @@ const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
-
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -69,7 +71,7 @@ exports.getAllBooks = async (req, res) => {
     // Add book_url to each book
     const booksWithUrl = books.map(book => ({
       ...book._doc,
-      book_url: `${req.protocol}://${req.get('host')}/api/v1/books/${book._id}/view`
+      book_url: book.book_file.url // This will now be the HTTP URL
     }));
 
     res.status(200).json({
@@ -118,7 +120,7 @@ exports.getBook = async (req, res) => {
       data: {
         book: {
           ...book._doc,
-          book_url: `${req.protocol}://${req.get('host')}/api/view/books/${book._id}`
+          book_url: book.book_file.url, // This will now be the HTTP URL
         },
       },
     });
@@ -161,9 +163,8 @@ exports.createBook = [
         });
       }
 
-      const result = await cloudinary.uploader.upload(file.path, {
-        resource_type: 'raw',
-      });
+      // Construct the HTTP URL for the file
+      const fileUrl = `http://localhost:5000/uploads/${file.filename}`;
 
       const newBook = await Book.create({
         title: req.body.title,
@@ -172,14 +173,11 @@ exports.createBook = [
         year: req.body.year,
         abstract: req.body.abstract,
         book_file: {
-          public_id: result.public_id,
-          url: result.secure_url,
+          public_id: file.filename,
+          url: fileUrl, // Store the HTTP URL instead of the local file path
         },
         uploaded_by: req.user.id,
       });
-
-      // Delete temporary file
-      fs.unlinkSync(file.path);
 
       res.status(201).json({
         success: true,
@@ -223,9 +221,6 @@ exports.updateBook = async (req, res) => {
 
     // Handle file upload if new file is provided
     if (req.file) {
-      // Delete old file from cloudinary
-      await cloudinary.uploader.destroy(book.book_file.public_id);
-
       // Update with new file
       book.book_file = {
         public_id: req.file.filename,
@@ -275,8 +270,14 @@ exports.deleteBook = async (req, res) => {
       });
     }
 
-    // Delete file from cloudinary
-    await cloudinary.uploader.destroy(book.book_file.public_id);
+    // Log the book details before deletion
+    console.log('Deleting book:', book);
+
+    // Delete file from local storage
+    const filePath = path.join(uploadsDir, book.book_file.public_id);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
 
     // Delete book from database
     await Book.findByIdAndDelete(req.params.id);
@@ -286,27 +287,7 @@ exports.deleteBook = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-// Serve PDF book without token
-exports.viewBookPDF = async (req, res) => {
-  try {
-    const book = await Book.findById(req.params.id);
-
-    if (!book) {
-      return res.status(404).json({
-        success: false,
-        message: 'No book found with that ID',
-      });
-    }
-
-    res.redirect(book.book_file.url);
-  } catch (error) {
+    console.error('Error deleting book:', error); // Add this line to log the error
     res.status(500).json({
       success: false,
       message: error.message,

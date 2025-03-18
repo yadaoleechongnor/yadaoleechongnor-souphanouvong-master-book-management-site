@@ -11,24 +11,39 @@ const branchRoutes = require('./routes/branchRoutes');
 const facultyRoutes = require('./routes/facultyRoutes');
 const downloadRoutes = require('./routes/downloadRoutes');
 
+const path = require('path'); // Add this line
+
 // Load environment variables
 dotenv.config();
 
 const app = express();
 
+// Add CSP header middleware
+app.use((req, res, next) => {
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+  next();
+});
+
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  frameguard: {
+    action: 'sameorigin'
+  }
+}));
 app.use(cors({
-  origin: 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Authorization', 'Content-Type'],
+  origin: 'http://localhost:3000', // Remove trailing slash
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Add this line
+
 // Routes
 app.use('/api/users', userRoutes);
-app.use('/api/books', bookRoutes);
+app.use('/api/v1/books', bookRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/faculties', facultyRoutes);
