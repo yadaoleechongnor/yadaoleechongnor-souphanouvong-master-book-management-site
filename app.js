@@ -10,7 +10,8 @@ const departmentRoutes = require('./routes/departmentRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const facultyRoutes = require('./routes/facultyRoutes');
 const downloadRoutes = require('./routes/downloadRoutes');
-
+const passwordResetRoutes = require('./routes/passwordResetRoutes');
+const adminPasswordResetRoutes = require('./routes/adminPasswordResetRoutes');  // Add this line
 const path = require('path'); // Add this line
 
 // Load environment variables
@@ -31,10 +32,9 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: 'http://localhost:3000', // Remove trailing slash
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  origin: ['http://localhost:5173', 'http://localhost:3000'], // Add all your frontend origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -48,6 +48,17 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/faculties', facultyRoutes);
 app.use('/api/downloads', downloadRoutes);
+app.use('/api/password', passwordResetRoutes);
+app.use('/api', passwordResetRoutes); 
+app.use('/api/auth', passwordResetRoutes);  
+
+
+// admin password reset routes
+app.use('/api/admin/', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...')
+app.use('/api/admin/auth', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...')
+
+
+
 
 // Error handling middleware
 app.use((err, req, res, next) => {

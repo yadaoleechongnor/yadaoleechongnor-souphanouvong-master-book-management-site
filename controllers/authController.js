@@ -47,14 +47,14 @@ exports.register = async (req, res) => {
     }
 
     const newUser = await User.create({
-      user_name: req.body.user_name,
+      name: req.body.name, // Changed from user_name to name
       email: req.body.email,
       password: req.body.password,
       phone_number: req.body.phone_number,
       branch_id: req.body.branch_id,
       year: req.body.year,
       student_code: req.body.student_code,
-      role: 'student', // Ensure it's always student for registration
+      role: 'student', 
     });
 
     createSendToken(newUser, 201, res);

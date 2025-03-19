@@ -24,15 +24,15 @@ const userSchema = new mongoose.Schema(
     },
     branch_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'SubjectDepartment',
+      ref: 'branches',
     },
     year: {
       type: Number,
     },
     role: {
       type: String,
-      enum: ['user', 'teacher', 'admin'],
-      default: 'user',
+      enum: ['student', 'teacher', 'admin'],
+      default: 'student',
     },
     student_code: {
       type: String,
@@ -40,6 +40,8 @@ const userSchema = new mongoose.Schema(
     },
     passwordResetToken: String,
     passwordResetExpires: Date,
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
   },
   {
     timestamps: true,
