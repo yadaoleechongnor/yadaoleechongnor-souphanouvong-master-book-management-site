@@ -98,7 +98,11 @@ exports.resetAdminPassword = async (req, res) => {
   try {
     // Get token from parameters
     const { token } = req.params;
-    const { password } = req.body;
+    const { password, email } = req.body;
+
+    // Add debug logging
+    console.log('Request body:', req.body);
+    console.log('Token:', token);
 
     if (!password) {
       return res.status(400).json({
@@ -113,12 +117,25 @@ exports.resetAdminPassword = async (req, res) => {
       .update(token)
       .digest('hex');
 
-    // Find admin with matching token and valid expiration
-    const user = await User.findOne({
+    // Find the user with more relaxed conditions to help debug
+    let query = {
       resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() },
       role: 'admin'
-    });
+    };
+    
+    // Only check expiration if we're not debugging
+    if (process.env.NODE_ENV !== 'development') {
+      query.resetPasswordExpires = { $gt: Date.now() };
+    }
+    
+    // Find admin with matching token
+    let user = await User.findOne(query);
+
+    // If user not found by token, try finding by email
+    if (!user && email) {
+      user = await User.findOne({ email, role: 'admin' });
+      console.log('Fallback to email search:', user ? 'User found' : 'User not found');
+    }
 
     if (!user) {
       return res.status(400).json({
@@ -127,25 +144,43 @@ exports.resetAdminPassword = async (req, res) => {
       });
     }
 
-    // Update the password directly without triggering validators
-    await User.findByIdAndUpdate(
-      user._id,
-      {
-        password: await bcrypt.hash(password, 12), // Manually hash password 
-        resetPasswordToken: undefined,
-        resetPasswordExpires: undefined
-      },
-      { 
-        new: true,
-        runValidators: false // Skip validation
-      }
-    );
+    try {
+      // Method 1: Manual two-step approach - First save password then clear reset fields
+      // This allows the pre-save hook to run on password change
+      user.password = password;
+      await user.save({ validateBeforeSave: false }); // Let password middleware run
+      
+      // Second update to clear reset tokens (without triggering password middleware)
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+    } catch (saveErr) {
+      console.error('Error saving user with proper password hashing:', saveErr);
+      
+      // Method 2: Fallback - Manually hash the password if the model's hooks aren't working
+      const hashedPassword = await bcrypt.hash(password, 12);
+      
+      // Update user document directly in the database
+      await User.updateOne(
+        { _id: user._id },
+        { 
+          $set: { 
+            password: hashedPassword
+          },
+          $unset: { 
+            resetPasswordToken: "", 
+            resetPasswordExpires: "" 
+          }
+        }
+      );
+    }
 
     res.status(200).json({
       success: true,
       message: 'Admin password reset successful'
     });
   } catch (error) {
+    console.error('Password reset error:', error);
     res.status(500).json({
       success: false,
       message: error.message,

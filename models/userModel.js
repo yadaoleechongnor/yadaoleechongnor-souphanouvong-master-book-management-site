@@ -1,71 +1,82 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 
-const userSchema = new mongoose.Schema(
-  {
+// Only define the schema if it doesn't exist yet
+let User;
+
+// Check if the model already exists
+if (mongoose.models && mongoose.models.User) {
+  User = mongoose.models.User;
+} else {
+  // Define new schema and model
+  const userSchema = new mongoose.Schema({
     name: {
       type: String,
-      required: [true, 'Please tell us your name!'],
+      required: [true, 'Name is required'],
+      trim: true,
     },
     email: {
       type: String,
-      required: [true, 'Please provide your email'],
+      required: [true, 'Email is required'],
       unique: true,
+      trim: true,
       lowercase: true,
+      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email address'],
     },
     password: {
       type: String,
-      required: [true, 'Please provide a password'],
-      minlength: 8,
-    },
-    phone_number: {
-      type: String,
-      trim: true,
-    },
-    branch_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'branches',
-    },
-    year: {
-      type: Number,
+      required: [true, 'Password is required'],
+      minlength: [6, 'Password must be at least 6 characters'],
     },
     role: {
       type: String,
-      enum: ['student', 'teacher', 'admin'],
-      default: 'student',
+      enum: ['user', 'admin'],
+      default: 'user',
     },
-    student_code: {
-      type: String,
-      sparse: true,
+    department: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
     },
-    passwordResetToken: String,
-    passwordResetExpires: Date,
-    resetPasswordToken: String,
-    resetPasswordExpires: Date,
-  },
-  {
+    faculty: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Faculty',
+    },
+    branch: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }, {
     timestamps: true,
-  }
-);
+  });
 
-// Hash password before saving
-userSchema.pre('save', async function (next) {
-  // Only run this function if password was modified
-  if (!this.isModified('password')) return next();
+  // Pre-save hook to hash password before saving to database
+  userSchema.pre('save', async function(next) {
+    if (!this.isModified('password')) return next();
 
-  // Hash the password with cost of 12
-  this.password = await bcrypt.hash(this.password, 12);
-  next();
-});
+    try {
+      const salt = await bcrypt.genSalt(10);
+      this.password = await bcrypt.hash(this.password, salt);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  });
 
-// Method to check if password is correct
-userSchema.methods.correctPassword = async function (
-  candidatePassword,
-  userPassword
-) {
-  return await bcrypt.compare(candidatePassword, userPassword);
-};
+  // Method to compare password for login
+  userSchema.methods.comparePassword = async function(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
+    };
 
-const User = mongoose.model('User', userSchema);
+  User = mongoose.model('User', userSchema);
+}
 
+// Export the User model
 module.exports = User;

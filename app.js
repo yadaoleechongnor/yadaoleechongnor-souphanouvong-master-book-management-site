@@ -11,8 +11,9 @@ const branchRoutes = require('./routes/branchRoutes');
 const facultyRoutes = require('./routes/facultyRoutes');
 const downloadRoutes = require('./routes/downloadRoutes');
 const passwordResetRoutes = require('./routes/passwordResetRoutes');
-const adminPasswordResetRoutes = require('./routes/adminPasswordResetRoutes');  // Add this line
-const path = require('path'); // Add this line
+const adminPasswordResetRoutes = require('./routes/adminPasswordResetRoutes');
+const otpResetRoutes = require('./routes/otpResetRoutes'); // Add OTP reset routes
+const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -51,7 +52,7 @@ app.use('/api/downloads', downloadRoutes);
 app.use('/api/password', passwordResetRoutes);
 app.use('/api', passwordResetRoutes); 
 app.use('/api/auth', passwordResetRoutes);  
-
+app.use('/api/otp', otpResetRoutes); // Add OTP reset routes at /api/otp
 
 // admin password reset routes
 app.use('/api/admin/', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...')
