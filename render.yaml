@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: souphanouvong-library
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    nodeVersion: 16.20.0
+    envVars:
+      - key: NODE_ENV
+        value: production
