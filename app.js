@@ -33,7 +33,7 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Add all your frontend origins
+  origin: ['http://localhost:5173', 'https://souphanouvonguniversity-book-management.onrender.com'], // Add all your frontend origins
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
