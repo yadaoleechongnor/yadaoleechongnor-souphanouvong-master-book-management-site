@@ -1,6 +1,6 @@
 const User = require('../models/userModel');
 const crypto = require('crypto');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 // Request admin password reset (generates token and returns it directly)
 exports.adminForgotPassword = async (req, res) => {

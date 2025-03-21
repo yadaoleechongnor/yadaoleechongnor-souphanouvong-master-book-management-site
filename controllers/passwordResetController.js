@@ -1,6 +1,6 @@
 const User = require('../models/userModel');
 const crypto = require('crypto');
-const bcrypt = require('bcrypt'); // Changed from bcryptjs to bcrypt
+const bcrypt = require('bcryptjs'); // Changed from bcryptjs to bcrypt
 
 // Request password reset (generates token and returns it directly)
 exports.forgotPassword = async (req, res) => {
