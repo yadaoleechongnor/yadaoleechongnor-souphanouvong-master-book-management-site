@@ -2,7 +2,6 @@ const express = require('express');
 const app = express();
 
 const Book = require('../models/bookModel');
-const { cloudinary } = require('../config/cloudinary');
 const multer = require('multer');
 const fs = require('fs'); 
 const path = require('path');

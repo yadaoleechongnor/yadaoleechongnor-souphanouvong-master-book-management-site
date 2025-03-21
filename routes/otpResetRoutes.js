@@ -1,11 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { requestOTP, verifyOTP } = require('../controllers/otpController');
+const { requestOTP, verifyOTP, requestPasswordResetOTP, resetPassword, verifyUserEmail } = require('../controllers/otpController');
 
-// OTP request route - sends OTP to user's email
+// OTP request routes
 router.post('/request', requestOTP);
+router.post('/request-password-reset', requestPasswordResetOTP);
 
-// OTP verification route - validates the OTP submitted by user
+// OTP verification routes
 router.post('/verify', verifyOTP);
+router.post('/verify-email', verifyOTP); // Use the verifyOTP handler for email verification too
+
+// Password reset route
+router.post('/reset-password', resetPassword);
+
+// Specific email verification route
+router.post('/verify-user-email', verifyUserEmail);
 
 module.exports = router;

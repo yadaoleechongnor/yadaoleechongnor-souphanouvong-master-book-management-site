@@ -28,22 +28,26 @@ if (mongoose.models && mongoose.models.User) {
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
     },
-    role: {
+    phone_number: {
       type: String,
-      enum: ['user', 'admin'],
-      default: 'user',
+      trim: true,
     },
-    department: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Department',
-    },
-    faculty: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Faculty',
-    },
-    branch: {
+    branch_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
+    },
+    year: {
+      type: String,
+      trim: true,
+    },
+    student_code: {
+      type: String,
+      trim: true,
+    },
+    role: {
+      type: String,
+      enum: ['student','teacher', 'admin'],
+      default: 'studnet',
     },
     createdAt: {
       type: Date,
@@ -57,12 +61,16 @@ if (mongoose.models && mongoose.models.User) {
     timestamps: true,
   });
 
-  // Pre-save hook to hash password before saving to database
+  // Password hashing middleware
   userSchema.pre('save', async function(next) {
+    // Only hash the password if it has been modified (or is new)
     if (!this.isModified('password')) return next();
-
+    
     try {
+      // Generate a salt
       const salt = await bcrypt.genSalt(10);
+      
+      // Hash the password along with the new salt
       this.password = await bcrypt.hash(this.password, salt);
       next();
     } catch (error) {
@@ -73,7 +81,7 @@ if (mongoose.models && mongoose.models.User) {
   // Method to compare password for login
   userSchema.methods.comparePassword = async function(candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
-    };
+  };
 
   User = mongoose.model('User', userSchema);
 }

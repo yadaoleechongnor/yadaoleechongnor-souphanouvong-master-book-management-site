@@ -40,7 +40,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Add this line
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Ensure this line is present
 
 // Routes
 app.use('/api/users', userRoutes);
@@ -50,16 +50,22 @@ app.use('/api/branches', branchRoutes);
 app.use('/api/faculties', facultyRoutes);
 app.use('/api/downloads', downloadRoutes);
 app.use('/api/password', passwordResetRoutes);
-app.use('/api', passwordResetRoutes); 
 app.use('/api/auth', passwordResetRoutes);  
+// Consolidate the auth-related routes to avoid conflicts and make the routing more predictable
+
 app.use('/api/otp', otpResetRoutes); // Add OTP reset routes at /api/otp
 
+// OTP and auth routes - make sure there are no duplicate routes
+app.use('/api/otp', otpResetRoutes); // Keep primary OTP routes
+
+// Instead of duplicating routes which can cause confusion, let's be more specific
+app.use('/api/auth/password-reset', otpResetRoutes); // More specific path for password reset operations
+
 // admin password reset routes
-app.use('/api/admin/', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...')
-app.use('/api/admin/auth', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...')
+app.use('/api/admin', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...
 
-
-
+// Remove this duplicate route that might be causing conflicts
+// app.use('/api', passwordResetRoutes); 
 
 // Error handling middleware
 app.use((err, req, res, next) => {
