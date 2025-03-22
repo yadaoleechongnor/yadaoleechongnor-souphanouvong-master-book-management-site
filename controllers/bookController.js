@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 
 const Book = require('../models/bookModel');
+const mongoose = require('mongoose');
 const multer = require('multer');
 const fs = require('fs'); 
 const path = require('path');
@@ -27,109 +28,297 @@ const upload = multer({
   },
 }).any(); // Use .any() to accept any fields and debug
 
-// Get all books
-exports.getAllBooks = async (req, res) => {
-  try {
-    // Build query
-    const queryObj = { ...req.query };
-    const excludedFields = ['page', 'sort', 'limit', 'fields'];
-    excludedFields.forEach((field) => delete queryObj[field]);
+// Create custom async handler in case the package is not installed
+let asyncHandler;
+try {
+  asyncHandler = require('express-async-handler');
+} catch (error) {
+  console.log('express-async-handler not found, using custom implementation');
+  // Custom implementation of asyncHandler
+  asyncHandler = (fn) => (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
 
-    // Find books
-    let query = Book.find(queryObj)
-      .populate({
-        path: 'branch_id',
-        select: 'branch_name',
-        populate: {
-          path: 'department_id',
-          select: 'department_name',
-          populate: {
-            path: 'faculties_id',
-            select: 'faculties_name'
-          }
-        }
-      })
-      .populate('uploaded_by', 'user_name');
-
-    // Sort
-    if (req.query.sort) {
-      const sortBy = req.query.sort.split(',').join(' ');
-      query = query.sort(sortBy);
-    } else {
-      query = query.sort('-createdAt');
-    }
-
-    // Pagination
-    const page = req.query.page * 1 || 1;
-    const limit = req.query.limit * 1 || 100;
-    const skip = (page - 1) * limit;
-    query = query.skip(skip).limit(limit);
-
-    const books = await query;
-
-    // Add book_url to each book
-    const booksWithUrl = books.map(book => ({
-      ...book._doc,
-      book_url: book.book_file.url // This will now be the HTTP URL
-    }));
-
-    res.status(200).json({
-      success: true,
-      results: booksWithUrl.length,
-      data: {
-        books: booksWithUrl,
-      },
-    });
-  } catch (error) {
-    console.error('Error fetching books:', error); // Add this line to log the error
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+// Helper function to calculate text similarity score
+const calculateSimilarityScore = (text, searchTerm) => {
+  if (!text || !searchTerm) return 0;
+  
+  text = text.toLowerCase();
+  searchTerm = searchTerm.toLowerCase();
+  
+  // Exact match gets highest score
+  if (text === searchTerm) return 100;
+  
+  // Calculate how many terms from the search query appear in the text
+  const searchTerms = searchTerm.split(/\s+/).filter(term => term.length > 1);
+  let score = 0;
+  
+  // If the entire search term is contained in the text
+  if (text.includes(searchTerm)) {
+    score += 80;
   }
+  
+  // Add points for each search term that appears in the text
+  searchTerms.forEach(term => {
+    if (text.includes(term)) {
+      score += 10;
+      
+      // Bonus points if the term appears at the beginning of the text
+      if (text.startsWith(term)) {
+        score += 5;
+      }
+    }
+  });
+  
+  // Normalize score between 0-100
+  return Math.min(100, score);
 };
 
-// Get a single book
-exports.getBook = async (req, res) => {
-  try {
-    const book = await Book.findById(req.params.id)
-      .populate({
-        path: 'branch_id',
-        select: 'branch_name',
-        populate: {
-          path: 'department_id',
-          select: 'department_name',
-          populate: {
-            path: 'faculties_id',
-            select: 'faculties_name'
-          }
-        }
-      })
-      .populate('uploaded_by', 'user_name');
+// Get all books
+exports.getAllBooks = asyncHandler(async (req, res) => {
+  const books = await Book.find()
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  res.status(200).json({
+    success: true,
+    count: books.length,
+    data: books
+  });
+});
 
-    if (!book) {
-      return res.status(404).json({
-        success: false,
-        message: 'No book found with that ID',
+// Get book by ID
+exports.getBook = asyncHandler(async (req, res) => {
+  const book = await Book.findById(req.params.id)
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  if (!book) {
+    return res.status(404).json({
+      success: false,
+      message: 'No book found with that ID'
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: book
+  });
+});
+
+// Get books by branch
+exports.getBooksByBranch = asyncHandler(async (req, res) => {
+  const { branchId } = req.params;
+  
+  const books = await Book.find({ branch_id: branchId })
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  res.status(200).json({
+    success: true,
+    count: books.length,
+    data: books
+  });
+});
+
+// Search books by branch name - with relevance ranking
+exports.searchBooksByBranchName = asyncHandler(async (req, res) => {
+  // Accept both branchName and branch as query parameters for flexibility
+  const branchName = req.query.branchName || req.query.branch;
+  
+  if (!branchName) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a branch name to search'
+    });
+  }
+
+  console.log(`Searching for branch with name containing: "${branchName}"`);
+  
+  try {
+    // First find branches that match the name pattern
+    const Branch = mongoose.model('Branch');
+    
+    // Log all branches to help diagnose the issue
+    const allBranches = await Branch.find({});
+    console.log('All available branches:', allBranches.map(b => b.name));
+    
+    // Get all branches for scoring
+    const branches = await Branch.find({});
+    
+    // Score and sort branches by relevance
+    const scoredBranches = branches.map(branch => {
+      const score = calculateSimilarityScore(branch.name, branchName);
+      return { branch, score };
+    }).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    
+    console.log(`Found ${scoredBranches.length} branches with similarity scores`);
+    
+    if (scoredBranches.length === 0) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: []
       });
     }
-
-    res.status(200).json({
+    
+    // Get branch IDs from scored branches
+    const branchIds = scoredBranches.map(item => item.branch._id);
+    
+    // Find books belonging to these branches
+    const books = await Book.find({ branch_id: { $in: branchIds } })
+      .populate('branch_id', 'name')
+      .populate('uploaded_by', 'name email');
+    
+    // Score and sort books by branch relevance
+    const scoredBooks = books.map(book => {
+      const branchItem = scoredBranches.find(
+        item => item.branch._id.toString() === book.branch_id._id.toString()
+      );
+      return {
+        book,
+        score: branchItem ? branchItem.score : 0
+      };
+    }).sort((a, b) => b.score - a.score);
+    
+    // Extract just the books for response
+    const rankedBooks = scoredBooks.map(item => item.book);
+    
+    return res.status(200).json({
       success: true,
-      data: {
-        book: {
-          ...book._doc,
-          book_url: book.book_file.url, // This will now be the HTTP URL
-        },
-      },
+      count: rankedBooks.length,
+      data: rankedBooks
     });
+    
   } catch (error) {
-    res.status(500).json({
+    console.error('Error in searchBooksByBranchName:', error);
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: 'Error searching for books by branch name',
+      error: error.message
     });
   }
-};
+});
+
+// Get books by year
+exports.getBooksByYear = asyncHandler(async (req, res) => {
+  const { year } = req.params;
+  
+  const books = await Book.find({ year: Number(year) })
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  res.status(200).json({
+    success: true,
+    count: books.length,
+    data: books
+  });
+});
+
+// Search books by year (using query parameter)
+exports.searchBooksByYear = asyncHandler(async (req, res) => {
+  const { year } = req.query;
+  
+  if (!year || isNaN(Number(year))) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a valid year parameter'
+    });
+  }
+  
+  const books = await Book.find({ year: Number(year) })
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  res.status(200).json({
+    success: true,
+    count: books.length,
+    data: books
+  });
+});
+
+// Search books by author (search) - with relevance ranking
+exports.searchBooksByAuthor = asyncHandler(async (req, res) => {
+  const { author } = req.query;
+  
+  if (!author) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide an author name to search'
+    });
+  }
+  
+  // Get all books and populate necessary fields
+  const allBooks = await Book.find()
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  // Score and sort books by author name similarity
+  const scoredBooks = allBooks.map(book => {
+    const score = calculateSimilarityScore(book.author, author);
+    return { book, score };
+  }).filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+  
+  // Extract just the books for response
+  const rankedBooks = scoredBooks.map(item => item.book);
+  
+  res.status(200).json({
+    success: true,
+    count: rankedBooks.length,
+    data: rankedBooks
+  });
+});
+
+// Get books by uploader
+exports.getBooksByUploader = asyncHandler(async (req, res) => {
+  const { uploaderId } = req.params;
+  
+  const books = await Book.find({ uploaded_by: uploaderId })
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  res.status(200).json({
+    success: true,
+    count: books.length,
+    data: books
+  });
+});
+
+// Search books by title - with relevance ranking
+exports.searchBooksByTitle = asyncHandler(async (req, res) => {
+  const { title } = req.query;
+  
+  if (!title) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide a title to search'
+    });
+  }
+  
+  // Get all books and populate necessary fields
+  const allBooks = await Book.find()
+    .populate('branch_id', 'name')
+    .populate('uploaded_by', 'name email');
+  
+  // Score and sort books by title similarity
+  const scoredBooks = allBooks.map(book => {
+    const score = calculateSimilarityScore(book.title, title);
+    return { book, score };
+  }).filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+  
+  // Extract just the books for response
+  const rankedBooks = scoredBooks.map(item => item.book);
+  
+  res.status(200).json({
+    success: true,
+    count: rankedBooks.length,
+    data: rankedBooks
+  });
+});
 
 // Create a book - Teachers and Admins only
 exports.createBook = [

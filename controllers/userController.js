@@ -66,7 +66,7 @@ exports.createUser = async (req, res) => {
     }
 
     const newUser = await User.create({
-      user_name: req.body.user_name,
+      name: req.body.name,
       email: req.body.email,
       password: req.body.password,
       phone_number: req.body.phone_number,
@@ -122,11 +122,12 @@ exports.updateUser = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
       {
-        user_name: req.body.user_name,
+        name: req.body.name,
         email: req.body.email,
         phone_number: req.body.phone_number,
         branch_id: req.body.branch_id,
         year: req.body.year,
+        student_code: req.body.student_code,
         ...(req.user.role === 'admin' && { role: req.body.role }),
       },
       {
