@@ -97,3 +97,61 @@ FALLBACK_TO_ETHEREAL=true
 # CLOUDINARY_CLOUD_NAME=xxx
 # CLOUDINARY_API_KEY=xxx
 # CLOUDINARY_API_SECRET=xxx -->
+
+
+get all the book with branch
+
+
+exports.getBranchesWithBooks = asyncHandler(async (req, res) => {
+  try {
+    // Aggregate to find branches with books
+    const branchesWithBooks = await Book.aggregate([
+      {
+        $group: {
+          _id: '$branch_id',
+          bookCount: { $sum: 1 }
+        }
+      },
+      {
+        $match: {
+          bookCount: { $gt: 0 }
+        }
+      }
+    ]);
+
+    // Extract branch IDs
+    const branchIds = branchesWithBooks.map(item => item._id);
+
+    // Get the full branch details
+    const Branch = mongoose.model('Branch');
+    const branches = await Branch.find({ 
+      _id: { $in: branchIds } 
+    });
+
+    // Add book count to each branch
+    const branchesWithCounts = branches.map(branch => {
+      const branchData = branchesWithBooks.find(
+        item => item._id.toString() === branch._id.toString()
+      );
+      return {
+        _id: branch._id,
+        name: branch.name,
+        description: branch.description,
+        bookCount: branchData ? branchData.bookCount : 0
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: branchesWithCounts.length,
+      data: branchesWithCounts
+    });
+  } catch (error) {
+    console.error('Error getting branches with books:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving branches with books',
+      error: error.message
+    });
+  }
+});

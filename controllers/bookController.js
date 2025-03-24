@@ -107,185 +107,66 @@ exports.getBook = asyncHandler(async (req, res) => {
   });
 });
 
-// Get books by branch
-exports.getBooksByBranch = asyncHandler(async (req, res) => {
-  const { branchId } = req.params;
-  
-  const books = await Book.find({ branch_id: branchId })
-    .populate('branch_id', 'name')
-    .populate('uploaded_by', 'name email');
-  
-  res.status(200).json({
-    success: true,
-    count: books.length,
-    data: books
-  });
-});
-
-// Search books by branch name - with relevance ranking
-exports.searchBooksByBranchName = asyncHandler(async (req, res) => {
-  // Accept both branchName and branch as query parameters for flexibility
-  const branchName = req.query.branchName || req.query.branch;
-  
-  if (!branchName) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide a branch name to search'
-    });
-  }
-
-  console.log(`Searching for branch with name containing: "${branchName}"`);
-  
+exports.getBranchesWithBooks = asyncHandler(async (req, res) => {
   try {
-    // First find branches that match the name pattern
+    // Aggregate to find branches with books
+    const branchesWithBooks = await Book.aggregate([
+      {
+        $group: {
+          _id: '$branch_id',
+          bookCount: { $sum: 1 },
+          books: { $push: '$$ROOT' } // Collect all books for each branch
+        }
+      },
+      {
+        $match: {
+          bookCount: { $gt: 0 }
+        }
+      }
+    ]);
+
+    // Extract branch IDs
+    const branchIds = branchesWithBooks.map(item => item._id);
+
+    // Get the full branch details
     const Branch = mongoose.model('Branch');
-    
-    // Log all branches to help diagnose the issue
-    const allBranches = await Branch.find({});
-    console.log('All available branches:', allBranches.map(b => b.name));
-    
-    // Get all branches for scoring
-    const branches = await Branch.find({});
-    
-    // Score and sort branches by relevance
-    const scoredBranches = branches.map(branch => {
-      const score = calculateSimilarityScore(branch.name, branchName);
-      return { branch, score };
-    }).filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score);
-    
-    console.log(`Found ${scoredBranches.length} branches with similarity scores`);
-    
-    if (scoredBranches.length === 0) {
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        data: []
-      });
-    }
-    
-    // Get branch IDs from scored branches
-    const branchIds = scoredBranches.map(item => item.branch._id);
-    
-    // Find books belonging to these branches
-    const books = await Book.find({ branch_id: { $in: branchIds } })
-      .populate('branch_id', 'name')
-      .populate('uploaded_by', 'name email');
-    
-    // Score and sort books by branch relevance
-    const scoredBooks = books.map(book => {
-      const branchItem = scoredBranches.find(
-        item => item.branch._id.toString() === book.branch_id._id.toString()
+    const branches = await Branch.find({ 
+      _id: { $in: branchIds } 
+    });
+
+    // Add book count, branch name, and books to each branch
+    const branchesWithDetails = branchesWithBooks.map(branchData => {
+      const branch = branches.find(
+        b => b._id.toString() === branchData._id.toString()
       );
       return {
-        book,
-        score: branchItem ? branchItem.score : 0
+        branch: {
+          _id: branch._id,
+          branch_name: branch.branch_name // Use branch_name as defined in the Branch model
+        },
+        books: branchData.books // Include books for the branch
       };
-    }).sort((a, b) => b.score - a.score);
-    
-    // Extract just the books for response
-    const rankedBooks = scoredBooks.map(item => item.book);
-    
-    return res.status(200).json({
-      success: true,
-      count: rankedBooks.length,
-      data: rankedBooks
     });
-    
+
+    res.status(200).json({
+      success: true,
+      count: branchesWithDetails.length,
+      data: branchesWithDetails
+    });
   } catch (error) {
-    console.error('Error in searchBooksByBranchName:', error);
-    return res.status(500).json({
+    console.error('Error getting branches with books:', error);
+    res.status(500).json({
       success: false,
-      message: 'Error searching for books by branch name',
+      message: 'Error retrieving branches with books',
       error: error.message
     });
   }
 });
 
-// Get books by year
-exports.getBooksByYear = asyncHandler(async (req, res) => {
-  const { year } = req.params;
-  
-  const books = await Book.find({ year: Number(year) })
-    .populate('branch_id', 'name')
-    .populate('uploaded_by', 'name email');
-  
-  res.status(200).json({
-    success: true,
-    count: books.length,
-    data: books
-  });
-});
 
-// Search books by year (using query parameter)
-exports.searchBooksByYear = asyncHandler(async (req, res) => {
-  const { year } = req.query;
-  
-  if (!year || isNaN(Number(year))) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide a valid year parameter'
-    });
-  }
-  
-  const books = await Book.find({ year: Number(year) })
-    .populate('branch_id', 'name')
-    .populate('uploaded_by', 'name email');
-  
-  res.status(200).json({
-    success: true,
-    count: books.length,
-    data: books
-  });
-});
 
-// Search books by author (search) - with relevance ranking
-exports.searchBooksByAuthor = asyncHandler(async (req, res) => {
-  const { author } = req.query;
-  
-  if (!author) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide an author name to search'
-    });
-  }
-  
-  // Get all books and populate necessary fields
-  const allBooks = await Book.find()
-    .populate('branch_id', 'name')
-    .populate('uploaded_by', 'name email');
-  
-  // Score and sort books by author name similarity
-  const scoredBooks = allBooks.map(book => {
-    const score = calculateSimilarityScore(book.author, author);
-    return { book, score };
-  }).filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score);
-  
-  // Extract just the books for response
-  const rankedBooks = scoredBooks.map(item => item.book);
-  
-  res.status(200).json({
-    success: true,
-    count: rankedBooks.length,
-    data: rankedBooks
-  });
-});
 
-// Get books by uploader
-exports.getBooksByUploader = asyncHandler(async (req, res) => {
-  const { uploaderId } = req.params;
-  
-  const books = await Book.find({ uploaded_by: uploaderId })
-    .populate('branch_id', 'name')
-    .populate('uploaded_by', 'name email');
-  
-  res.status(200).json({
-    success: true,
-    count: books.length,
-    data: books
-  });
-});
+
 
 // Search books by title - with relevance ranking
 exports.searchBooksByTitle = asyncHandler(async (req, res) => {
@@ -328,6 +209,7 @@ exports.createBook = [
       console.log('After multer - req.body:', req.body);
       console.log('After multer - req.file:', req.file);
       console.log('req.files:', req.files);
+      console.log('req.user:', req.user); // Log user information
 
       const file = req.files.find(f => f.fieldname === 'file');
       if (!file) {
@@ -344,7 +226,22 @@ exports.createBook = [
         });
       }
 
-      if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
+      // Get user information from either req.user (set by auth middleware) or from req.body
+      const user = req.user || (req.body.userId && req.body.role ? {
+        id: req.body.userId,
+        role: req.body.role
+      } : null);
+
+      // Check if user info is available
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required. Please log in.',
+        });
+      }
+
+      // Check if user has appropriate role
+      if (user.role !== 'admin' && user.role !== 'teacher') {
         return res.status(403).json({
           success: false,
           message: 'You do not have permission to create a book',
@@ -364,7 +261,7 @@ exports.createBook = [
           public_id: file.filename,
           url: fileUrl, // Store the HTTP URL instead of the local file path
         },
-        uploaded_by: req.user.id,
+        uploaded_by: user.id,
       });
 
       res.status(201).json({
@@ -387,6 +284,20 @@ exports.createBook = [
 // Update a book - Teachers (own books) and Admins only
 exports.updateBook = async (req, res) => {
   try {
+    // Get user information from either req.user (set by auth middleware) or from req.body
+    const user = req.user || (req.body.userId && req.body.role ? {
+      id: req.body.userId,
+      role: req.body.role
+    } : null);
+
+    // Check if user info is available
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in.',
+      });
+    }
+    
     let book = await Book.findById(req.params.id);
 
     if (!book) {
@@ -398,8 +309,8 @@ exports.updateBook = async (req, res) => {
 
     // Check if user is the uploader or admin
     if (
-      req.user.role !== 'admin' &&
-      book.uploaded_by.toString() !== req.user.id
+      user.role !== 'admin' &&
+      book.uploaded_by.toString() !== user.id
     ) {
       return res.status(403).json({
         success: false,
@@ -442,7 +353,21 @@ exports.updateBook = async (req, res) => {
 // Delete a book - Admins only
 exports.deleteBook = async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    // Get user information from either req.user (set by auth middleware) or from req.body
+    const user = req.user || (req.body.userId && req.body.role ? {
+      id: req.body.userId,
+      role: req.body.role
+    } : null);
+
+    // Check if user info is available
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in.',
+      });
+    }
+    
+    if (user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to delete this book',

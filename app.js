@@ -3,18 +3,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
 
-// Import routes
-const userRoutes = require('./routes/userRoutes');
-const bookRoutes = require('./routes/bookRoutes');
-const departmentRoutes = require('./routes/departmentRoutes');
-const branchRoutes = require('./routes/branchRoutes');
-const facultyRoutes = require('./routes/facultyRoutes');
-const downloadRoutes = require('./routes/downloadRoutes');
-const passwordResetRoutes = require('./routes/passwordResetRoutes');
-const adminPasswordResetRoutes = require('./routes/adminPasswordResetRoutes');
-const otpResetRoutes = require('./routes/otpResetRoutes'); // Add OTP reset routes
-const path = require('path');
-
 // Load environment variables
 dotenv.config();
 
@@ -33,14 +21,36 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://souphanouvonguniversity-book-management.onrender.com'], // Add all your frontend origins
+  origin: ['http://localhost:5173', 'https://souphanouvonguniversity-book-management.onrender.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Ensure this line is present
+// Try to use cookie-parser if available, otherwise continue without it
+try {
+  const cookieParser = require('cookie-parser');
+  app.use(cookieParser());
+  console.log('Cookie parser middleware enabled');
+} catch (err) {
+  console.warn('Cookie parser not available, continuing without cookie support');
+  // This will allow the app to run even without cookie-parser
+}
+
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Import routes
+const userRoutes = require('./routes/userRoutes');
+const bookRoutes = require('./routes/bookRoutes');
+const departmentRoutes = require('./routes/departmentRoutes');
+const branchRoutes = require('./routes/branchRoutes');
+const facultyRoutes = require('./routes/facultyRoutes');
+const downloadRoutes = require('./routes/downloadRoutes');
+const passwordResetRoutes = require('./routes/passwordResetRoutes');
+const adminPasswordResetRoutes = require('./routes/adminPasswordResetRoutes');
+const otpResetRoutes = require('./routes/otpResetRoutes');
 
 // Routes
 app.use('/users', userRoutes);
@@ -50,22 +60,10 @@ app.use('/branches', branchRoutes);
 app.use('/faculties', facultyRoutes);
 app.use('/downloads', downloadRoutes);
 app.use('/password', passwordResetRoutes);
-app.use('/auth', passwordResetRoutes);  
-// Consolidate the auth-related routes to avoid conflicts and make the routing more predictable
-
-app.use('/otp', otpResetRoutes); // Add OTP reset routes at /api/otp
-
-// OTP and auth routes - make sure there are no duplicate routes
-app.use('/otp', otpResetRoutes); // Keep primary OTP routes
-
-// Instead of duplicating routes which can cause confusion, let's be more specific
-app.use('/auth/password-reset', otpResetRoutes); // More specific path for password reset operations
-
-// admin password reset routes
-app.use('/admin', adminPasswordResetRoutes);  // This will make routes available at /api/admin/resetpassword/...
-
-// Remove this duplicate route that might be causing conflicts
-// app.use('/api', passwordResetRoutes); 
+app.use('/auth', passwordResetRoutes);
+app.use('/otp', otpResetRoutes);
+app.use('/auth/password-reset', otpResetRoutes);
+app.use('/admin', adminPasswordResetRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

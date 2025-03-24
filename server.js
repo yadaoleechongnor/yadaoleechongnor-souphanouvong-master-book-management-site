@@ -1,3 +1,5 @@
+require('events').EventEmitter.defaultMaxListeners = 20;
+
 const app = require('./app');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');

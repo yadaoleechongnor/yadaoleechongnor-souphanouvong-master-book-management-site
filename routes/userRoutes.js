@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, restrictTo } = require('../middlewares/authMiddleware');
+const { protect, restrictTo } = require('../middleware/authMiddleware');  // Changed from 'middlewares' to 'middleware'
 const authController = require('../controllers/authController');
 const userController = require('../controllers/userController');
 
@@ -22,6 +22,7 @@ router.patch('/updateMyPassword', authController.updatePassword);
 router.use(restrictTo('admin'));
 
 // Routes for getting users by role
+router.get('/users', userController.getAllUsers);
 router.get('/students', userController.getAllStudents);
 router.get('/teachers', userController.getAllTeachers);
 router.get('/admins', userController.getAllAdmins);

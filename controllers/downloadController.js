@@ -106,3 +106,123 @@ exports.getBookDownloads = async (req, res) => {
     });
   }
 };
+
+const getAllDownloads = async (req, res) => {
+  try {
+    const downloads = await Download.find();
+    res.status(200).json({
+      status: 'success',
+      results: downloads.length,
+      data: {
+        downloads,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+
+const getDownload = async (req, res) => {
+  try {
+    const download = await Download.findById(req.params.id);
+    
+    if (!download) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Download not found',
+      });
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        download,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+
+const createDownload = async (req, res) => {
+  try {
+    const newDownload = await Download.create(req.body);
+    
+    res.status(201).json({
+      status: 'success',
+      data: {
+        download: newDownload,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error.message,
+    });
+  }
+};
+
+const updateDownload = async (req, res) => {
+  try {
+    const download = await Download.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+    
+    if (!download) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Download not found',
+      });
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        download,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error.message,
+    });
+  }
+};
+
+const deleteDownload = async (req, res) => {
+  try {
+    const download = await Download.findByIdAndDelete(req.params.id);
+    
+    if (!download) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Download not found',
+      });
+    }
+    
+    res.status(204).json({
+      status: 'success',
+      data: null,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error.message,
+    });
+  }
+};
+
+module.exports = {
+  getAllDownloads,
+  getDownload,
+  createDownload,
+  updateDownload,
+  deleteDownload,
+};

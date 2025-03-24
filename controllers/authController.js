@@ -6,13 +6,26 @@ const { validationResult } = require('express-validator');
 // Generate JWT token
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
   });
 };
 
 // Create and send token as response
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
+
+  // Set cookie options
+  const cookieOptions = {
+    expires: new Date(
+      Date.now() + (parseInt(process.env.JWT_COOKIE_EXPIRES_IN) || 30) * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true,
+  };
+
+  if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
+
+  // Set cookie
+  res.cookie('jwt', token, cookieOptions);
 
   // Remove sensitive data before sending response
   user.password = undefined;
@@ -89,18 +102,26 @@ exports.login = async (req, res) => {
     }
 
     // Send token and role
-    const token = signToken(user._id);
-    res.status(200).json({
-      success: true,
-      token,
-      role: user.role,
-    });
+    createSendToken(user, 200, res);
   } catch (error) {
     res.status(400).json({
       success: false,
       message: error.message,
     });
   }
+};
+
+// Logout user
+exports.logout = (req, res) => {
+  res.cookie('jwt', 'loggedout', {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'User logged out successfully',
+  });
 };
 
 // Forgot password

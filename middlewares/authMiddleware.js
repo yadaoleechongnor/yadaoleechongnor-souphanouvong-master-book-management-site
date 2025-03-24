@@ -1,61 +1,69 @@
 const jwt = require('jsonwebtoken');
-const { promisify } = require('util');
-const User = require('../models/userModel');
+const User = require('../models/userModel'); // Adjust path as needed
 
-// Middleware to protect routes
-exports.protect = async (req, res, next) => {
-  try {
-    let token;
-    
-    // 1) Get token and check if it exists
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer')
-    ) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'You are not logged in. Please log in to get access',
-      });
-    }
-
-    // 2) Verification token
-    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
-
-    // 3) Check if user still exists
-    const currentUser = await User.findById(decoded.id);
-    if (!currentUser) {
-      return res.status(401).json({
-        success: false,
-        message: 'The user belonging to this token no longer exists',
-      });
-    }
-
-    // Grant access to protected route
-    req.user = currentUser;
-    next();
-  } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: 'Invalid token or user not authenticated',
-      error: error.message,
-    });
-  }
+// Create custom async handler since express-async-handler is not installed
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-// Middleware to restrict access based on user roles
-exports.restrictTo = (...roles) => {
+// Middleware for checking user authentication
+const protect = asyncHandler(async (req, res, next) => {
+  let token;
+
+  // Check if token exists in headers
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    try {
+      // Get token from header
+      token = req.headers.authorization.split(' ')[1];
+
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Get user from the token
+      req.user = await User.findById(decoded.id).select('-password');
+
+      next();
+    } catch (error) {
+      console.error('Auth token error:', error);
+      // Instead of sending an error, just continue to the next middleware
+      // This allows the controller to try alternative auth methods (like from req.body)
+      next();
+    }
+  } else if (req.body && req.body.userId && req.body.role) {
+    // If no token but user info in body, let the controller handle it
+    next();
+  } else {
+    // No authentication info found, let the controller handle it
+    next();
+  }
+});
+
+// Middleware for checking specific roles
+const authorize = (...roles) => {
   return (req, res, next) => {
-    // Check if the current user's role is included in the allowed roles
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
+    // User will be set by the protect middleware if token is valid
+    if (!req.user && (!req.body.userId || !req.body.role)) {
+      return res.status(401).json({
         success: false,
-        message: 'You do not have permission to perform this action',
+        message: 'Authentication required. Please log in.',
       });
     }
+    
+    // Get role from req.user (from token) or from req.body
+    const userRole = req.user ? req.user.role : req.body.role;
+    
+    if (!roles.includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: `Role ${userRole} is not authorized to access this resource`,
+      });
+    }
+    
     next();
   };
 };
+
+module.exports = { protect, authorize };

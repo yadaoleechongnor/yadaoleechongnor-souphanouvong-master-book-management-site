@@ -1,40 +1,21 @@
 const express = require('express');
-const { protect, restrictTo } = require('../middlewares/authMiddleware');
+const { protect, restrictTo } = require('../middleware/authMiddleware');
 const downloadController = require('../controllers/downloadController');
 const path = require('path');
 
 const router = express.Router();
 
-// All download routes require authentication
+// Public routes
+router.get('/', downloadController.getAllDownloads);
+router.get('/:id', downloadController.getDownload);
+
+// Protected routes
 router.use(protect);
 
-// Record a download
-router.post('/:bookId', downloadController.recordDownload);
-
-// Get user's downloads
-router.get('/user/:userId', downloadController.getUserDownloads);
-
-// Admin and teacher routes
+// Routes for teachers and admins only
 router.use(restrictTo('teacher', 'admin'));
-router.get('/book/:bookId', downloadController.getBookDownloads);
-
-// Admin only routes
-router.use(restrictTo('admin'));
-router.get('/', downloadController.getAllDownloads);
-
-// Handle file downloads
-router.get('/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(__dirname, '../uploads', filename);
-
-  res.download(filePath, (err) => {
-    if (err) {
-      res.status(404).json({
-        success: false,
-        error: 'File not found',
-      });
-    }
-  });
-});
+router.post('/', downloadController.createDownload);
+router.patch('/:id', downloadController.updateDownload);
+router.delete('/:id', downloadController.deleteDownload);
 
 module.exports = router;

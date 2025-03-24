@@ -2,25 +2,43 @@ const mongoose = require('mongoose');
 
 const downloadSchema = new mongoose.Schema(
   {
-    user_id: {
-      type: mongoose.Schema.Types.ObjectId,
+    title: {
+      type: String,
+      required: [true, 'A download must have a title'],
+      trim: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    file: {
+      type: String,
+      required: [true, 'A download must have a file'],
+    },
+    uploadedBy: {
+      type: mongoose.Schema.ObjectId,
       ref: 'User',
-      required: [true, 'User ID is required'],
+      required: [true, 'A download must belong to a user'],
     },
-    book_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Book',
-      required: [true, 'Book ID is required'],
-    },
-    download_date: {
+    createdAt: {
       type: Date,
-      default: Date.now,
+      default: Date.now(),
     },
   },
   {
-    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Pre-find middleware to populate user data
+downloadSchema.pre(/^find/, function (next) {
+  this.populate({
+    path: 'uploadedBy',
+    select: 'name email role',
+  });
+  next();
+});
 
 const Download = mongoose.model('Download', downloadSchema);
 

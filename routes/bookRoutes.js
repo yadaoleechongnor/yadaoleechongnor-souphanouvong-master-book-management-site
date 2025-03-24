@@ -1,45 +1,21 @@
 const express = require('express');
+const { protect, restrictTo } = require('../middleware/authMiddleware');
 const bookController = require('../controllers/bookController');
-const authController = require('../controllers/authController');
 
 const router = express.Router();
 
-// Apply authentication middleware to routes that require user information
-// router.use(authController.protect);
-
-// Get all books
+// Public routes - Anyone can view books
 router.get('/', bookController.getAllBooks);
+router.get('/getbookwithbranch', bookController.getBranchesWithBooks);
+router.get('/searchbook', bookController.searchBooksByTitle);
+router.get('/:id', bookController.getBook);
 
-// Get books by branch
-router.get('/branch/:branchId', bookController.getBooksByBranch);
+// Protected routes - Only authenticated users can access these
+router.use(protect);
 
-// Search books by branch name (new route)
-router.get('/search/branch', bookController.searchBooksByBranchName);
-
-// Get books by year
-// router.get('/year/:year', bookController.getBooksByYear);
-
-// Search books by author
-router.get('/search/author', bookController.searchBooksByAuthor);
-
-// Get books by uploader
-router.get('/uploader/:uploaderId', bookController.getBooksByUploader);
-
-// Search books by title
-router.get('/search/title', bookController.searchBooksByTitle);
-
-// Make sure this route comes BEFORE any routes with path parameters like :id
-router.get('/year', bookController.searchBooksByYear);
-
-router
-  .route('/')
-  // .get(bookController.getAllBooks)
-  .post(bookController.createBook);
-
-router
-  .route('/:id')
-  .get(bookController.getBook)
-  .patch(bookController.updateBook)
-  .delete(bookController.deleteBook);
+// Teacher and admin only routes - Only these roles can create/update/delete books
+router.post('/', restrictTo('teacher', 'admin'), bookController.createBook);
+router.patch('/:id', restrictTo('teacher', 'admin'), bookController.updateBook);
+router.delete('/:id', restrictTo('teacher', 'admin'), bookController.deleteBook);
 
 module.exports = router;
