@@ -163,11 +163,6 @@ exports.getBranchesWithBooks = asyncHandler(async (req, res) => {
   }
 });
 
-
-
-
-
-
 // Search books by title - with relevance ranking
 exports.searchBooksByTitle = asyncHandler(async (req, res) => {
   const { title } = req.query;
@@ -350,30 +345,27 @@ exports.updateBook = async (req, res) => {
   }
 };
 
-// Delete a book - Admins only
+// Delete a book - Teachers and Admins only
 exports.deleteBook = async (req, res) => {
   try {
-    // Get user information from either req.user (set by auth middleware) or from req.body
-    const user = req.user || (req.body.userId && req.body.role ? {
-      id: req.body.userId,
-      role: req.body.role
-    } : null);
-
-    // Check if user info is available
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required. Please log in.',
-      });
-    }
+    // Debug user information
+    console.log('Delete request from user:', {
+      userId: req.user ? req.user.id : 'no user id',
+      userRole: req.user ? req.user.role : 'no user role',
+      bookId: req.params.id
+    });
     
-    if (user.role !== 'admin') {
+    // Allow both teachers and admins to delete books
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'teacher')) {
+      console.log('Permission denied - user role:', req.user ? req.user.role : 'undefined');
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to delete this book',
       });
     }
 
+    console.log('Permission granted for role:', req.user.role);
+    
     const book = await Book.findById(req.params.id);
 
     if (!book) {
@@ -400,7 +392,7 @@ exports.deleteBook = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error('Error deleting book:', error); // Add this line to log the error
+    console.error('Error deleting book:', error);
     res.status(500).json({
       success: false,
       message: error.message,
