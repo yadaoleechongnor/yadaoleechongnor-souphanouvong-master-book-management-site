@@ -22,7 +22,7 @@ app.use(helmet({
 }));
 app.use(cors({
 origin: [
-    'https://vite-react-book-management-syste-production.up.railway.app'
+    'https://vite-react-book-management-syste-production.up.railway.app',
     'http://localhost:5173', 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
