@@ -21,7 +21,11 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: ['http://localhost:5173'|| 'https://souphanouvonguniversity-book-management.onrender.com'|| 'vite-react-book-management-syste-production.up.railway.app'],
+origin: [
+    'http://localhost:5173', 
+    'https://souphanouvonguniversity-book-management.onrender.com', 
+    'https://vite-react-book-management-syste-production.up.railway.app'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
