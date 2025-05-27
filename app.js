@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
+const fs = require('fs');
+const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -21,12 +23,33 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: ['http://localhost:5173'|| 'https://souphanouvonguniversity-book-management.onrender.com'|| 'vite-react-book-management-syste-production.up.railway.app'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
+  origin: ['http://localhost:5173', 'https://souphanouvonguniversity-book-management.onrender.com', 'vite-react-book-management-syste-production.up.railway.app'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  exposedHeaders: ['Content-Range', 'Content-Length', 'Content-Type']
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Add OPTIONS handling for preflight requests
+app.options('*', cors());
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(uploadsDir));
+
+// Configure maximum file size for uploads
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
+  next();
+});
 
 // Try to use cookie-parser if available, otherwise continue without it
 try {
@@ -38,9 +61,6 @@ try {
   // This will allow the app to run even without cookie-parser
 }
 
-const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // Import routes
 const userRoutes = require('./routes/userRoutes');
 const bookRoutes = require('./routes/bookRoutes');
@@ -51,10 +71,11 @@ const downloadRoutes = require('./routes/downloadRoutes');
 const passwordResetRoutes = require('./routes/passwordResetRoutes');
 const adminPasswordResetRoutes = require('./routes/adminPasswordResetRoutes');
 const otpResetRoutes = require('./routes/otpResetRoutes');
+const newsRoutes = require('./routes/newsRoutes');
 
 // Routes
 app.use('/users', userRoutes);
-app.use('/v1/books', bookRoutes);
+app.use(['/books', '/v1/books'], bookRoutes);  // Handle both path prefixes
 app.use('/departments', departmentRoutes);
 app.use('/branches', branchRoutes);
 app.use('/faculties', facultyRoutes);
@@ -64,15 +85,15 @@ app.use('/auth', passwordResetRoutes);
 app.use('/otp', otpResetRoutes);
 app.use('/auth/password-reset', otpResetRoutes);
 app.use('/admin', adminPasswordResetRoutes);
+app.use('/news',newsRoutes)
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
-  res.status(statusCode).json({
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
     success: false,
-    error: message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    message: err.message || 'Internal Server Error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
 });
 

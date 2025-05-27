@@ -287,7 +287,7 @@ exports.getDownloadStats = async (req, res) => {
 };
 
 // Get weekly download trends
-exports.getDownloadTrends = async (req, res) => {
+exports.getDownloadTrends  = async (req, res) => {
   try {
     // Default to last 6 weeks if not specified
     const weeks = parseInt(req.query.weeks) || 6;

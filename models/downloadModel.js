@@ -14,10 +14,11 @@ const downloadSchema = new mongoose.Schema(
     },
     download_date: {
       type: Date,
-      default: Date.now(),
+      default: Date.now
     }
   },
   {
+    timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }

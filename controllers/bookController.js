@@ -16,17 +16,17 @@ const storage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
-  },
+    const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  }
 });
 
 const upload = multer({
   storage: storage,
-  fileFilter: (req, file, cb) => {
-    console.log('File received:', file);
-    cb(null, true);
-  },
-}).any(); // Use .any() to accept any fields and debug
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+  }
+}).single('file');
 
 // Create custom async handler in case the package is not installed
 let asyncHandler;
@@ -197,150 +197,160 @@ exports.searchBooksByTitle = asyncHandler(async (req, res) => {
 });
 
 // Create a book - Teachers and Admins only
-exports.createBook = [
-  upload,
-  async (req, res) => {
-    try {
-      console.log('After multer - req.body:', req.body);
-      console.log('After multer - req.file:', req.file);
-      console.log('req.files:', req.files);
-      console.log('req.user:', req.user); // Log user information
-
-      const file = req.files.find(f => f.fieldname === 'file');
-      if (!file) {
-        return res.status(400).json({
-          success: false,
-          message: 'Please upload a book file with field name "file"',
-        });
-      }
-
-      if (!req.body.title || !req.body.author || !req.body.branch_id || !req.body.year || !req.body.abstract) {
-        return res.status(400).json({
-          success: false,
-          message: 'Please provide all required fields',
-        });
-      }
-
-      // Get user information from either req.user (set by auth middleware) or from req.body
-      const user = req.user || (req.body.userId && req.body.role ? {
-        id: req.body.userId,
-        role: req.body.role
-      } : null);
-
-      // Check if user info is available
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Authentication required. Please log in.',
-        });
-      }
-
-      // Check if user has appropriate role
-      if (user.role !== 'admin' && user.role !== 'teacher') {
-        return res.status(403).json({
-          success: false,
-          message: 'You do not have permission to create a book',
-        });
-      }
-
-      // Construct the HTTP URL for the file
-      const fileUrl = `http://localhost:5000/uploads/${file.filename}`;
-
-      const newBook = await Book.create({
-        title: req.body.title,
-        author: req.body.author,
-        branch_id: req.body.branch_id,
-        year: req.body.year,
-        abstract: req.body.abstract,
-        book_file: {
-          public_id: file.filename,
-          url: fileUrl, // Store the HTTP URL instead of the local file path
-        },
-        uploaded_by: user.id,
-      });
-
-      res.status(201).json({
-        success: true,
-        data: {
-          book: newBook,
-        },
-      });
-    } catch (error) {
-      console.error('Error:', error);
-      res.status(500).json({
+exports.createBook = async (req, res) => {
+  try {
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+    
+    if (!req.file) {
+      return res.status(400).json({
         success: false,
-        message: error.message || 'Failed to create book',
-        stack: error.stack,
+        message: 'No file uploaded'
       });
     }
+
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Convert year to number
+    const year = parseInt(req.body.year, 10);
+    if (isNaN(year)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Year must be a valid number'
+      });
+    }
+
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    
+    const newBook = await Book.create({
+      title: req.body.title,
+      author: req.body.author,
+      branch_id: req.body.branch_id,
+      year: year, // Use converted year
+      abstract: req.body.abstract,
+      book_file: {
+        public_id: req.file.filename,
+        url: fileUrl
+      },
+      uploaded_by: req.user.id
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newBook
+    });
+  } catch (error) {
+    console.error('Book creation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating book',
+      error: error.message
+    });
   }
-];
+};
 
 // Update a book - Teachers (own books) and Admins only
 exports.updateBook = async (req, res) => {
   try {
-    // Get user information from either req.user (set by auth middleware) or from req.body
-    const user = req.user || (req.body.userId && req.body.role ? {
-      id: req.body.userId,
-      role: req.body.role
-    } : null);
+    console.log('Update request:', {
+      body: req.body,
+      file: req.file,
+      user: req.user
+    });
 
-    // Check if user info is available
-    if (!user) {
+    if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: 'Authentication required. Please log in.',
+        message: 'Authentication required'
       });
     }
-    
-    let book = await Book.findById(req.params.id);
 
+    let book = await Book.findById(req.params.id);
     if (!book) {
       return res.status(404).json({
         success: false,
-        message: 'No book found with that ID',
+        message: 'No book found with that ID'
       });
     }
 
-    // Check if user is the uploader or admin
-    if (
-      user.role !== 'admin' &&
-      book.uploaded_by.toString() !== user.id
-    ) {
+    // Allow both teachers and admins to update
+    if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
       return res.status(403).json({
         success: false,
-        message: 'You do not have permission to update this book',
+        message: 'You do not have permission to update this book'
       });
     }
 
-    // Handle file upload if new file is provided
+    // Check if there's anything to update
+    if (!req.file && Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No updates provided'
+      });
+    }
+
+    let updateData = {};
+
+    // Handle file update if new file is provided
     if (req.file) {
-      // Update with new file
-      book.book_file = {
+      // Delete old file if it exists
+      if (book.book_file && book.book_file.public_id) {
+        const oldFilePath = path.join(uploadsDir, book.book_file.public_id);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+      updateData.book_file = {
         public_id: req.file.filename,
-        url: req.file.path,
+        url: fileUrl
       };
     }
 
-    // Update other book details
-    book.title = req.body.title || book.title;
-    book.author = req.body.author || book.author;
-    book.branch_id = req.body.branch_id || book.branch_id;
-    book.year = req.body.year || book.year;
-    book.abstract = req.body.abstract || book.abstract;
+    // Handle other fields
+    if (req.body.title) updateData.title = req.body.title;
+    if (req.body.author) updateData.author = req.body.author;
+    if (req.body.branch_id) updateData.branch_id = req.body.branch_id;
+    if (req.body.abstract) updateData.abstract = req.body.abstract;
+    
+    // Handle year separately for validation
+    if (req.body.year) {
+      const year = parseInt(req.body.year, 10);
+      if (isNaN(year)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Year must be a valid number'
+        });
+      }
+      updateData.year = year;
+    }
 
-    await book.save();
+    // Update book with new data
+    const updatedBook = await Book.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).populate('branch_id', 'name')
+     .populate('uploaded_by', 'name email');
 
     res.status(200).json({
       success: true,
-      data: {
-        book,
-      },
+      message: 'Book updated successfully',
+      data: updatedBook
     });
+
   } catch (error) {
-    res.status(400).json({
+    console.error('Update error:', error);
+    res.status(500).json({
       success: false,
-      message: error.message,
+      message: 'Error updating book',
+      error: error.message
     });
   }
 };
