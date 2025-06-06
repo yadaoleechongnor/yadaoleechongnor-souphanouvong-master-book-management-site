@@ -23,33 +23,12 @@ app.use(helmet({
   }
 }));
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://souphanouvonguniversity-book-management.onrender.com', 'vite-react-book-management-syste-production.up.railway.app'],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true,
-  exposedHeaders: ['Content-Range', 'Content-Length', 'Content-Type']
+  origin: ['http://localhost:5173'],
+  methods: ['GET', 'POST','PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true
 }));
-
-// Add OPTIONS handling for preflight requests
-app.options('*', cors());
-
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Serve static files from uploads directory
-app.use('/uploads', express.static(uploadsDir));
-
-// Configure maximum file size for uploads
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
-  next();
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Try to use cookie-parser if available, otherwise continue without it
 try {
