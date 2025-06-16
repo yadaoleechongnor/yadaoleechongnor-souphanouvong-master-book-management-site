@@ -20,25 +20,34 @@ app.use((req, res, next) => {
 app.use(helmet({
   frameguard: {
     action: 'sameorigin'
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:", "*"],
+    },
+  },
+}));
+
+// Serve static files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   }
 }));
+
 app.use(cors({
-  origin: ['http://localhost:5173'],
-  methods: ['GET', 'POST','PATCH', 'DELETE', 'OPTIONS'],
-  credentials: true
+  origin: 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Try to use cookie-parser if available, otherwise continue without it
-try {
-  const cookieParser = require('cookie-parser');
-  app.use(cookieParser());
-  console.log('Cookie parser middleware enabled');
-} catch (err) {
-  console.warn('Cookie parser not available, continuing without cookie support');
-  // This will allow the app to run even without cookie-parser
-}
+
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
