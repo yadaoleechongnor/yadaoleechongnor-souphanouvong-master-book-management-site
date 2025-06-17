@@ -25,7 +25,7 @@ const upload = multer({
 // Public routes - Anyone can view books
 router.get('/', bookController.getAllBooks);
 router.get('/getbookwithbranch', bookController.getBranchesWithBooks);
-router.get('/searchbook', bookController.searchBooksByTitle);
+router.get('/searchbook', bookController.searchBooks); // Updated path and removed 'book'
 router.get('/:id', bookController.getBook);
 
 // Protected routes - Only authenticated users can access these

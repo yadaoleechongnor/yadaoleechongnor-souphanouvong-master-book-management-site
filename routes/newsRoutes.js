@@ -16,7 +16,7 @@ const handleMulterError = (err, req, res, next) => {
 router.get('/', newsController.getAllNews);
 router.get('/:id', newsController.getNewsById);
 router.post('/', upload.single('image'), handleMulterError, newsController.createNews);
-router.put('/:id', upload.single('image'), handleMulterError, newsController.updateNews);
+router.patch('/:id', upload.single('image'), handleMulterError, newsController.updateNews);
 router.delete('/:id', newsController.deleteNews);
 
 module.exports = router;

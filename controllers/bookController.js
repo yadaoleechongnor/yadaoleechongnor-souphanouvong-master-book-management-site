@@ -163,38 +163,129 @@ exports.getBranchesWithBooks = asyncHandler(async (req, res) => {
   }
 });
 
-// Search books by title - with relevance ranking
-exports.searchBooksByTitle = asyncHandler(async (req, res) => {
-  const { title } = req.query;
+// Comprehensive search function for books
+exports.searchBooks = asyncHandler(async (req, res) => {
+  try {
+    const { search, fields } = req.query; // Changed from 'query' to 'search'
   
-  if (!title) {
-    return res.status(400).json({
+    if (!search) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a search query'
+      });
+    }
+
+    // Get all books with populated fields
+    const allBooks = await Book.find()
+      .populate('branch_id', 'branch_name')
+      .populate('uploaded_by', 'name email');
+
+    // Parse fields to search if provided
+    const searchFields = fields ? fields.split(',') : ['title', 'author', 'year', 'branch'];
+
+    // Score and sort books by multiple criteria
+    const scoredBooks = allBooks.map(book => {
+      let totalScore = 0;
+      const searchQuery = search.toLowerCase();
+
+      // Calculate score based on specified fields
+      searchFields.forEach(field => {
+        switch(field.trim()) {
+          case 'title':
+            totalScore += calculateSimilarityScore(book.title, searchQuery) * 3;
+            break;
+          case 'author':
+            totalScore += calculateSimilarityScore(book.author, searchQuery) * 2;
+            break;
+          case 'branch':
+            if (book.branch_id && book.branch_id.branch_name) {
+              totalScore += calculateSimilarityScore(book.branch_id.branch_name, searchQuery) * 1.5;
+            }
+            break;
+          case 'year':
+            if (book.year && searchQuery.includes(book.year.toString())) {
+              totalScore += 50;
+            }
+            break;
+          case 'abstract':
+            if (book.abstract) {
+              totalScore += calculateSimilarityScore(book.abstract, searchQuery);
+            }
+            break;
+        }
+      });
+
+      // Find similar books
+      const similarBooks = allBooks
+        .filter(otherBook => 
+          otherBook._id.toString() !== book._id.toString() &&
+          calculateSimilarityScore(otherBook.title, book.title) > 60
+        )
+        .map(similarBook => ({
+          _id: similarBook._id,
+          title: similarBook.title,
+          author: similarBook.author,
+          similarity: calculateSimilarityScore(similarBook.title, book.title)
+        }))
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, 3);
+
+      return {
+        book: {
+          ...book.toObject(),
+          similarBooks
+        },
+        score: totalScore
+      };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+    // Format response
+    const searchResults = scoredBooks.map(({ book }) => book);
+
+    res.status(200).json({
+      success: true,
+      count: searchResults.length,
+      data: searchResults
+    });
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Please provide a title to search'
+      message: 'Error performing search',
+      error: error.message
     });
   }
-  
-  // Get all books and populate necessary fields
-  const allBooks = await Book.find()
-    .populate('branch_id', 'name')
-    .populate('uploaded_by', 'name email');
-  
-  // Score and sort books by title similarity
-  const scoredBooks = allBooks.map(book => {
-    const score = calculateSimilarityScore(book.title, title);
-    return { book, score };
-  }).filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score);
-  
-  // Extract just the books for response
-  const rankedBooks = scoredBooks.map(item => item.book);
-  
-  res.status(200).json({
-    success: true,
-    count: rankedBooks.length,
-    data: rankedBooks
-  });
 });
+
+// Helper function to calculate combined score across all fields
+const calculateCombinedScore = (book, query) => {
+  let score = 0;
+  
+  // Title search (highest weight)
+  score += calculateSimilarityScore(book.title, query) * 3;
+  
+  // Author search
+  score += calculateSimilarityScore(book.author, query) * 2;
+  
+  // Branch name search
+  if (book.branch_id && book.branch_id.branch_name) {
+    score += calculateSimilarityScore(book.branch_id.branch_name, query) * 1.5;
+  }
+  
+  // Abstract search
+  if (book.abstract) {
+    score += calculateSimilarityScore(book.abstract, query);
+  }
+  
+  // Year search
+  if (book.year && query.includes(book.year.toString())) {
+    score += 50;
+  }
+  
+  return score;
+};
 
 // Create a book - Teachers and Admins only
 exports.createBook = async (req, res) => {
